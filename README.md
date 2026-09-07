@@ -5,7 +5,8 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL RLS](https://img.shields.io/badge/PostgreSQL-Row--Level%20Security-336791.svg?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org)
-[![Pytest](https://img.shields.io/badge/Tests-75%2F75%20Passed%20(100%25)-success.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
+[![Pytest](https://img.shields.io/badge/Tests-81%2F81%20Passed%20(100%25)-success.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
+[![Coverage](https://img.shields.io/badge/Coverage-84%25%20(pytest--cov)-green.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Franchise ve bayi ağı modeliyle faaliyet gösteren işletmeler için geliştirilmiş; **çok kiracılı (multi-tenant)**, **kademeli ciro payı ve hakediş mutabakatı**, **personel prim motoru**, **PostgreSQL Row-Level Security (RLS)** ile mutlak veri izolasyonu, **tarihsel kural versiyonlama**, **donmuş immutable snapshot**, **resmi PDF ihracı** ve **UBL-TR e-fatura veri iskeleti** sunan uçtan uca kurumsal finans platformudur.
@@ -175,15 +176,20 @@ Sistem seed çalıştırıldığında aşağıdaki test kullanıcılarıyla haz�
 
 ## 🧪 Test ve Kalite Güvencesi
 
-FranchiseOS, **75 adet otomatikleştirilmiş test** ile %100 kapsama ve sıfır regresyon garantisi altındadır.
+FranchiseOS, **81 adet otomatikleştirilmiş test** ile %100 test başarı oranı (pass rate) ve %84 kod kapsamı (pytest-cov) ile güvence altındadır.
 
 ```powershell
-# Tüm backend testlerini çalıştırmak için:
+# Tüm backend testlerini çalıştırmak ve kod kapsamını (coverage) ölçmek için:
 cd backend
-..\.venv\Scripts\pytest -v
+..\.venv\Scripts\pytest --cov=backend/app --cov-report=term-missing -v
 ```
 
-### Test Paketi Dağılımı (75 / 75 PASSED):
+### Kalite ve Kapsam Metrikleri
+* **Test Başarı Oranı (Pass Rate):** `%100` (81 / 81 test yeşil)
+* **Kod Kapsamı (Code Coverage):** `%84` (`pytest-cov` ile ölçülmüştür; Veri Modelleri & Şemalar `%99-%100`, Hesaplama & Finans Motorları `%96-%100`)
+
+### Test Paketi Dağılımı (81 / 81 PASSED):
+- **P0 Güvenlik & Finansal Sertleştirme (`test_p0_hardening.py`):** Kapalı dönem işlem atama bypass engeli, kilitli dönem mutasyon koruması, KDV dahil/hariç matematiksel invariant validasyonu, KVKK veri minimizasyonu (`customer_tax_id` gizleme ve yetkili `/sensitive` endpoint'i), yarı-açık kural aralığı `[from, to)` sınır günü çakışma önlemi, production JWT secret & CORS kısıtları.
 - **Donmuş Snapshot Kanıtı (`test_frozen_snapshot_proof.py`):** Dönem kapandıktan sonra kurallar değişse bile mutabakatın ve PDF'in donmuş kaldığının, reopen ile canlıya döndüğünün kanıtı.
 - **Dönem Kilitleri & İmmutability (`test_closed_period_restrictions.py`):** Kapalı döneme işlem ekleme, güncelleme, silme ve Excel aktarım engelleri; bayi reopen yasağı ve gerekçe validasyonu.
 - **E-Fatura Veri İskeleti (`test_invoice_data_skeleton.py`):** Bayi ve Franchisor tahsilat yönlerinde UBL-TR uyumlu alıcı/satıcı, KDV ve satır hesapları.

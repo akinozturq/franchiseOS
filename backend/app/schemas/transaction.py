@@ -28,10 +28,18 @@ class TransactionBase(BaseModel):
     description: Optional[str] = None
 
     @model_validator(mode="after")
-    def compute_amount_incl_vat(self):
+    def compute_and_validate_amount_incl_vat(self):
+        calculated_incl = (self.amount_excl_vat * (Decimal("1.00") + self.vat_rate)).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
         if self.amount_incl_vat is None:
-            raw_incl = self.amount_excl_vat * (Decimal("1.00") + self.vat_rate)
-            self.amount_incl_vat = raw_incl.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            self.amount_incl_vat = calculated_incl
+        else:
+            # Finansal Bütünlük: KDV dahil tutar hariç tutar + KDV ile tutarlı olmalıdır (0.02 TL tolerans)
+            if abs(self.amount_incl_vat - calculated_incl) > Decimal("0.02"):
+                raise ValueError(
+                    f"KDV Dahil Tutar ({self.amount_incl_vat}) ile KDV Hariç Tutar ({self.amount_excl_vat}) ve %{int(self.vat_rate * 100)} KDV tutarsız. Beklenen: {calculated_incl}"
+                )
         return self
 
 class TransactionCreate(TransactionBase):
@@ -54,10 +62,18 @@ class TransactionUpdate(BaseModel):
     description: Optional[str] = None
 
     @model_validator(mode="after")
-    def compute_amount_incl_vat(self):
-        if self.amount_excl_vat is not None and self.vat_rate is not None and self.amount_incl_vat is None:
-            raw_incl = self.amount_excl_vat * (Decimal("1.00") + self.vat_rate)
-            self.amount_incl_vat = raw_incl.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    def compute_and_validate_amount_incl_vat(self):
+        if self.amount_excl_vat is not None and self.vat_rate is not None:
+            calculated_incl = (self.amount_excl_vat * (Decimal("1.00") + self.vat_rate)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            if self.amount_incl_vat is None:
+                self.amount_incl_vat = calculated_incl
+            else:
+                if abs(self.amount_incl_vat - calculated_incl) > Decimal("0.02"):
+                    raise ValueError(
+                        f"KDV Dahil Tutar ({self.amount_incl_vat}) ile KDV Hariç Tutar ({self.amount_excl_vat}) ve %{int(self.vat_rate * 100)} KDV tutarsız. Beklenen: {calculated_incl}"
+                    )
         return self
 
 class TransactionOut(BaseModel):
@@ -73,8 +89,7 @@ class TransactionOut(BaseModel):
     category_name: Optional[str] = None
     date: date
     customer_name: str
-    customer_tax_id: Optional[str] = None
-    customer_tax_id_masked: Optional[str] = None
+    customer_tax_id_masked: Optional[str] = None  # KVKK Veri Minimizasyonu: Ham TCKN/VKN API'de döndürülmez
     item_name: str
     staff_name: Optional[str] = None
     amount_excl_vat: Decimal
@@ -85,9 +100,3 @@ class TransactionOut(BaseModel):
     description: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
-    @model_validator(mode="after")
-    def set_masked_tax_id(self):
-        if self.customer_tax_id:
-            self.customer_tax_id_masked = mask_tax_id(self.customer_tax_id)
-        return self

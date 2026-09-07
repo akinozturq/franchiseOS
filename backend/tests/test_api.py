@@ -61,9 +61,18 @@ def test_list_transactions_with_masking(auth_headers):
     assert isinstance(txs, list)
     assert len(txs) > 0
     first_tx = txs[0]
-    # Check that masked tax id exists and has '*'
-    if first_tx.get("customer_tax_id"):
-        assert "*" in first_tx.get("customer_tax_id_masked")
+    # KVKK Veri Minimizasyonu: Standart API çıktısında açık customer_tax_id bulunmamalıdır
+    assert "customer_tax_id" not in first_tx
+    # Maskeli alan mevcut olmalı ve '*' içermelidir
+    assert first_tx.get("customer_tax_id_masked") is not None
+    assert "*" in first_tx.get("customer_tax_id_masked")
+
+    # Yetkili kullanıcı /sensitive endpoint'inden açık TCKN'yi alabilir
+    sens_res = client.get(f"/api/v1/transactions/{first_tx['id']}/sensitive", headers=auth_headers)
+    assert sens_res.status_code == 200
+    sens_data = sens_res.json()
+    assert "customer_tax_id" in sens_data
+    assert len(sens_data["customer_tax_id"]) in (10, 11)
 
 def test_reconciliation_report_bayi_collector(auth_headers):
     # Test for September 2026

@@ -13,6 +13,7 @@ from backend.app.models.department import Department
 from backend.app.models.transaction import Transaction
 from backend.app.models.commission_tier import CommissionTier
 from backend.app.models.period_setting import PeriodSetting
+from backend.app.models.period_closure import PeriodClosure
 from backend.app.schemas.reconciliation import (
     ReconciliationResponse,
     PeriodSettingUpdate,
@@ -147,7 +148,7 @@ def build_reconciliation_data(
                 TransactionCategory.effective_from <= tx.date,
                 or_(
                     TransactionCategory.effective_to == None,
-                    TransactionCategory.effective_to >= tx.date
+                    TransactionCategory.effective_to > tx.date
                 )
             ).first()
             if cat_rule:
@@ -176,7 +177,7 @@ def build_reconciliation_data(
         CommissionTier.effective_from <= period_date,
         or_(
             CommissionTier.effective_to == None,
-            CommissionTier.effective_to >= period_date
+            CommissionTier.effective_to > period_date
         )
     ).order_by(CommissionTier.min_amount.asc()).all()
 
@@ -263,11 +264,37 @@ def update_period_setting(
     """
     Bir dönemin tahsilat yapan taraf ve KDV ayarını kalıcı olarak kaydeder veya kilitler.
     """
+    # 1. Kapatılmış dönem kontrolü
+    closed_period = db.query(PeriodClosure).filter(
+        PeriodClosure.branch_id == branch_id,
+        PeriodClosure.year == setting_in.year,
+        PeriodClosure.month == setting_in.month,
+        PeriodClosure.status == "CLOSED"
+    ).first()
+    if closed_period:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{setting_in.year}-{setting_in.month:02d} dönemi kapatılmış ve kilitlenmiştir. Kapatılmış dönemin mutabakat ayarları değiştirilemez."
+        )
+
     setting = db.query(PeriodSetting).filter(
         PeriodSetting.branch_id == branch_id,
         PeriodSetting.year == setting_in.year,
         PeriodSetting.month == setting_in.month
     ).first()
+
+    # 2. Mevcut kilit kontrolü
+    if setting and setting.is_locked:
+        # Kilitliyken ve kilidi kaldırma talebi yokken ayar değiştirilemez
+        if setting_in.is_locked is not False:
+            if (
+                setting.collector_party != setting_in.collector_party.value or
+                (setting_in.vat_rate is not None and setting.vat_rate != setting_in.vat_rate)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{setting_in.year}-{setting_in.month:02d} dönemi mutabakat ayarları kilitlidir. Değişiklik yapmak için önce kilidi kaldırınız."
+                )
 
     if not setting:
         setting = PeriodSetting(

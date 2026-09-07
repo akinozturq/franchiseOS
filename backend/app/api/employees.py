@@ -16,6 +16,7 @@ from backend.app.schemas.employee import (
     EmployeeOut
 )
 from backend.app.schemas.transaction import TransactionOut
+from backend.app.api.transactions import assert_period_is_open
 
 router = APIRouter(prefix="/employees", tags=["Personel Yönetimi"])
 
@@ -118,7 +119,7 @@ def get_unassigned_transactions(
             category_name=t.category.name if t.category else None,
             date=t.date,
             customer_name=t.customer_name,
-            customer_tax_id=t.customer_tax_id,
+            customer_tax_id_masked=t.customer_tax_id_masked,
             item_name=t.item_name,
             staff_name=t.staff_name,
             amount_excl_vat=t.amount_excl_vat,
@@ -149,6 +150,9 @@ def assign_transactions_to_employee(
         Transaction.branch_id == branch_id,
         Transaction.id.in_(payload.transaction_ids)
     ).all()
+
+    for tx in txs:
+        assert_period_is_open(db, branch_id, tx.date)
 
     for tx in txs:
         tx.employee_id = emp.id

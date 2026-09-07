@@ -33,7 +33,7 @@ def list_categories(
     if target_date:
         query = query.filter(
             TransactionCategory.effective_from <= target_date,
-            or_(TransactionCategory.effective_to == None, TransactionCategory.effective_to >= target_date)
+            or_(TransactionCategory.effective_to == None, TransactionCategory.effective_to > target_date)
         )
     else:
         query = query.filter(TransactionCategory.effective_to == None)

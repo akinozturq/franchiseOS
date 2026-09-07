@@ -77,7 +77,7 @@ def build_period_bonus_data(branch_id: int, year: int, month: int, db: Session) 
                 RoleCommissionTier.effective_from <= period_date,
                 or_(
                     RoleCommissionTier.effective_to == None,
-                    RoleCommissionTier.effective_to >= period_date
+                    RoleCommissionTier.effective_to > period_date
                 )
             ).order_by(RoleCommissionTier.min_amount.asc()).all()
 
@@ -131,7 +131,7 @@ def build_period_bonus_data(branch_id: int, year: int, month: int, db: Session) 
                 TransactionCategory.effective_from <= tx.date,
                 or_(
                     TransactionCategory.effective_to == None,
-                    TransactionCategory.effective_to >= tx.date
+                    TransactionCategory.effective_to > tx.date
                 )
             ).first()
             if cat_rule:

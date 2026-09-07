@@ -35,3 +35,12 @@ class Transaction(Base):
     employee = relationship("Employee", back_populates="transactions")
     category = relationship("TransactionCategory", back_populates="transactions")
 
+    @property
+    def customer_tax_id_masked(self):
+        if not self.customer_tax_id:
+            return None
+        clean_id = str(self.customer_tax_id).strip()
+        if len(clean_id) <= 4:
+            return clean_id
+        return "*" * (len(clean_id) - 4) + clean_id[-4:]
+

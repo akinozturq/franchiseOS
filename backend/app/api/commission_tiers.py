@@ -31,7 +31,7 @@ def list_tiers(
     if target_date:
         query = query.filter(
             CommissionTier.effective_from <= target_date,
-            or_(CommissionTier.effective_to == None, CommissionTier.effective_to >= target_date)
+            or_(CommissionTier.effective_to == None, CommissionTier.effective_to > target_date)
         )
     else:
         query = query.filter(CommissionTier.effective_to == None)

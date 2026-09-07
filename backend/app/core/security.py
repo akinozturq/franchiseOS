@@ -52,8 +52,11 @@ def apply_tenant_context(db: Session, user: User, branch_id: Optional[int] = Non
             db.execute(text("SET app.is_franchisor_admin = 'false';"))
             target_bid = str(branch_id if branch_id is not None else (user.branch_id or ""))
             db.execute(text(f"SET app.current_branch_id = '{target_bid}';"))
-    except Exception:
-        pass
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Güvenlik bağlamı (RLS) kurulamadı: {str(exc)}"
+        )
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(

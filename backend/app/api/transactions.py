@@ -175,6 +175,31 @@ def get_transaction(
     out.category_name = tx.category.name if tx.category else tx.item_name
     return out
 
+@router.get("/{tx_id}/sensitive")
+def get_transaction_sensitive_data(
+    tx_id: int,
+    branch_id: int = Depends(get_active_branch_id),
+    current_user: User = Depends(require_roles("FRANCHISOR_ADMIN", "BAYI_ADMIN")),
+    db: Session = Depends(get_db)
+):
+    """
+    KVKK Veri Minimizasyonu:
+    Açık TCKN / VKN yalnızca yetkili yöneticiler (FRANCHISOR_ADMIN, BAYI_ADMIN)
+    tarafından özel yetkiyle sorgulanabilir.
+    """
+    tx = db.query(Transaction).filter(
+        Transaction.id == tx_id,
+        Transaction.branch_id == branch_id
+    ).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="İşlem kaydı bulunamadı.")
+    return {
+        "id": tx.id,
+        "customer_name": tx.customer_name,
+        "customer_tax_id": tx.customer_tax_id,
+        "customer_tax_id_masked": tx.customer_tax_id_masked
+    }
+
 @router.put("/{tx_id}", response_model=TransactionOut)
 def update_transaction(
     tx_id: int,
