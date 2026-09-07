@@ -2,6 +2,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 
+BONUS_ENGINE_VERSION = "1.0.0"
+
 def quantize_money(amount: Decimal) -> Decimal:
     """Round to 2 decimal places using standard half-up rounding."""
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

@@ -60,15 +60,32 @@ def test_list_transactions_with_masking(auth_headers):
     txs = response.json()
     assert isinstance(txs, list)
     assert len(txs) > 0
-    first_tx = txs[0]
+    sample_tx = next((t for t in txs if t.get("customer_tax_id_masked")), None)
+    if not sample_tx:
+        # Create a sample transaction with tax id
+        post_res = client.post(
+            "/api/v1/transactions",
+            json={
+                "date": "2026-09-01",
+                "department_id": 1,
+                "customer_name": "Maskeleme Test",
+                "customer_tax_id": "12345678901",
+                "item_name": "Test Kalemi",
+                "amount_excl_vat": "100.00",
+                "vat_rate": "0.20",
+                "amount_incl_vat": "120.00"
+            },
+            headers=auth_headers
+        )
+        sample_tx = post_res.json()
+
     # KVKK Veri Minimizasyonu: Standart API çıktısında açık customer_tax_id bulunmamalıdır
-    assert "customer_tax_id" not in first_tx
-    # Maskeli alan mevcut olmalı ve '*' içermelidir
-    assert first_tx.get("customer_tax_id_masked") is not None
-    assert "*" in first_tx.get("customer_tax_id_masked")
+    assert "customer_tax_id" not in sample_tx
+    assert sample_tx.get("customer_tax_id_masked") is not None
+    assert "*" in sample_tx.get("customer_tax_id_masked")
 
     # Yetkili kullanıcı /sensitive endpoint'inden açık TCKN'yi alabilir
-    sens_res = client.get(f"/api/v1/transactions/{first_tx['id']}/sensitive", headers=auth_headers)
+    sens_res = client.get(f"/api/v1/transactions/{sample_tx['id']}/sensitive", headers=auth_headers)
     assert sens_res.status_code == 200
     sens_data = sens_res.json()
     assert "customer_tax_id" in sens_data

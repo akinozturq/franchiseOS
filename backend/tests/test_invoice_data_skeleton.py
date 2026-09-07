@@ -73,7 +73,7 @@ def test_invoice_data_skeleton_bayi_collector():
     assert "issuer" in inv
     assert "recipient" in inv
     # When Bayi collects, Franchisor bills Bayi for its share
-    assert "Franchise Genel Merkez" in inv["issuer"]["title"]
+    assert "Franchisor" in inv["issuer"]["title"]
     assert "Kuzey" in inv["recipient"]["title"]
     
     # Check amounts and VAT consistency
@@ -82,6 +82,11 @@ def test_invoice_data_skeleton_bayi_collector():
     tot = Decimal(str(inv["total_amount_incl_vat"]))
     assert tot == net + vat
     assert len(inv["line_items"]) > 0
+
+    # Check cryptographic audit envelope
+    assert "calculation_engine_version" in inv["closure_audit"]
+    assert inv["closure_audit"]["input_hash"] is not None
+    assert inv["closure_audit"]["result_hash"] is not None
 
     # Cleanup
     cleanup_db = SessionLocal()
@@ -143,7 +148,7 @@ def test_invoice_data_skeleton_franchisor_collector():
 
     # When Franchisor collects, Bayi bills Franchisor for its earned share
     assert "Kuzey" in inv["issuer"]["title"]
-    assert "Franchise Genel Merkez" in inv["recipient"]["title"]
+    assert "Franchisor" in inv["recipient"]["title"]
     assert inv["currency"] == "TRY"
 
     # Cleanup

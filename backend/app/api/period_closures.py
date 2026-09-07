@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 from decimal import Decimal
+import hashlib
+import json
 from sqlalchemy.orm import Session
 
 from backend.app.core.database import get_db
 from backend.app.core.security import get_current_user, require_roles, get_active_branch_id
 from backend.app.models.user import User
 from backend.app.models.branch import Branch
+from backend.app.models.franchisor import Franchisor
 from backend.app.models.period_closure import PeriodClosure
 from backend.app.models.notification import Notification
 from backend.app.schemas.period_closure import (
@@ -18,6 +21,8 @@ from backend.app.schemas.period_closure import (
     PeriodClosureOut,
     InvoiceDataExportOut
 )
+from backend.app.services.commission_service import COMMISSION_ENGINE_VERSION
+from backend.app.services.bonus_service import BONUS_ENGINE_VERSION
 from backend.app.api.reconciliation import build_reconciliation_data
 from backend.app.api.bonus import build_period_bonus_data
 
@@ -230,6 +235,38 @@ def close_period(
     )
     bonus_snapshot = bonus_data.model_dump(mode="json")
 
+    engine_ver = f"commission-engine:{COMMISSION_ENGINE_VERSION},bonus-engine:{BONUS_ENGINE_VERSION}"
+
+    # Cryptographic Audit Hashes
+    input_payload = {
+        "branch_id": branch_id,
+        "year": body.year,
+        "month": body.month,
+        "tx_count": len(rec_snapshot.get("transactions", [])),
+        "turnover": str(rec_snapshot.get("total_turnover")),
+        "collector_party": rec_snapshot.get("collector_party"),
+        "vat_rate": str(rec_snapshot.get("vat_rate")),
+        "applicable_tier": rec_snapshot.get("applicable_tier")
+    }
+    input_hash = hashlib.sha256(json.dumps(input_payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+    result_payload = {
+        "reconciliation": rec_snapshot,
+        "bonus": bonus_snapshot,
+        "engine_version": engine_ver
+    }
+    result_hash = hashlib.sha256(json.dumps(result_payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+    audit_env = {
+        "engine_version": engine_ver,
+        "input_hash": input_hash,
+        "result_hash": result_hash,
+        "closed_at": datetime.now(timezone.utc).isoformat(),
+        "closed_by_user_id": current_user.id
+    }
+    rec_snapshot["audit_envelope"] = audit_env
+    bonus_snapshot["audit_envelope"] = audit_env
+
     # 3. Create frozen PeriodClosure
     closure = PeriodClosure(
         branch_id=branch_id,
@@ -239,7 +276,10 @@ def close_period(
         closed_at=datetime.now(timezone.utc),
         closed_by_user_id=current_user.id,
         reconciliation_snapshot=rec_snapshot,
-        bonus_snapshot=bonus_snapshot
+        bonus_snapshot=bonus_snapshot,
+        calculation_engine_version=engine_ver,
+        input_hash=input_hash,
+        result_hash=result_hash
     )
     db.add(closure)
 
@@ -341,11 +381,12 @@ def export_invoice_data(
     inv_dir = f"{issuer_str} -> {recipient_str}"
     collector = inv_summary.get("collector_party") or snapshot.get("collector_party", "BAYI")
 
-    # Franchisor static entity info
+    # Franchisor entity info from DB
+    franchisor = branch.franchisor if (branch and branch.franchisor) else db.query(Franchisor).first()
     franchisor_info = {
-        "title": "Franchise Genel Merkez A.Ş.",
-        "tax_office": "Büyük Mükellefler V.D.",
-        "tax_id": "1234567890",
+        "title": franchisor.name if franchisor else "Franchise Genel Merkez A.Ş.",
+        "tax_office": (franchisor.tax_office if franchisor else None) or "Büyük Mükellefler V.D.",
+        "tax_id": (franchisor.tax_id if franchisor else None) or "1234567890",
         "address": "Büyükdere Cad. No: 100, Levent, İstanbul"
     }
 
@@ -406,6 +447,9 @@ def export_invoice_data(
             "closure_id": closure.id,
             "closed_at": closure.closed_at.isoformat(),
             "closed_by": closed_by_name,
-            "status": closure.status
+            "status": closure.status,
+            "calculation_engine_version": closure.calculation_engine_version or "commission-engine:1.0.0,bonus-engine:1.0.0",
+            "input_hash": closure.input_hash,
+            "result_hash": closure.result_hash
         }
     )

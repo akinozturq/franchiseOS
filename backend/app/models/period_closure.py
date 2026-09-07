@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from backend.app.core.database import Base
@@ -17,6 +17,10 @@ class PeriodClosure(Base):
     
     reconciliation_snapshot = Column(JSON, nullable=True)
     bonus_snapshot = Column(JSON, nullable=True)
+    
+    calculation_engine_version = Column(String(100), nullable=True)
+    input_hash = Column(String(64), nullable=True)
+    result_hash = Column(String(64), nullable=True)
     
     reopened_at = Column(DateTime, nullable=True)
     reopened_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

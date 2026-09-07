@@ -135,24 +135,27 @@ def build_reconciliation_data(
     
     # 4. Fetch departments map
     dept_map = {d.id: d.name for d in db.query(Department).filter(Department.branch_id == branch.id).all()}
-    
-    # 5. Convert transactions to DTOs (using rule valid at tx.date)
+
+    # 5. Preload all category rules for this branch to eliminate N+1 queries
+    all_cat_rules = db.query(TransactionCategory).filter(
+        TransactionCategory.branch_id == branch.id
+    ).all()
+
+    def get_category_override_for_date(cat_name: Optional[str], tx_date: date) -> Optional[Decimal]:
+        if not cat_name:
+            return None
+        for cr in all_cat_rules:
+            if cr.name == cat_name and cr.effective_from <= tx_date and (cr.effective_to is None or cr.effective_to > tx_date):
+                return cr.general_override_rate
+        return None
+
+    # Convert transactions to DTOs
     tx_dtos = []
     for tx in transactions:
-        override_rate = tx.category.general_override_rate if tx.category else None
         cat_name = tx.category.name if tx.category else None
-        if tx.category:
-            cat_rule = db.query(TransactionCategory).filter(
-                TransactionCategory.branch_id == branch.id,
-                TransactionCategory.name == tx.category.name,
-                TransactionCategory.effective_from <= tx.date,
-                or_(
-                    TransactionCategory.effective_to == None,
-                    TransactionCategory.effective_to > tx.date
-                )
-            ).first()
-            if cat_rule:
-                override_rate = cat_rule.general_override_rate
+        override_rate = get_category_override_for_date(cat_name, tx.date)
+        if override_rate is None and tx.category:
+            override_rate = tx.category.general_override_rate
 
         tx_dtos.append(
             TransactionDTO(

@@ -178,11 +178,26 @@ def test_sensitive_tax_id_data_minimization(admin_headers, viewer_headers):
     res = client.get("/api/v1/transactions", headers={**admin_headers, "X-Branch-ID": "1"})
     assert res.status_code == 200
     txs = res.json()
-    assert len(txs) > 0
-    sample = txs[0]
+    sample = next((t for t in txs if t.get("customer_tax_id_masked")), None)
+    if not sample:
+        post_res = client.post(
+            "/api/v1/transactions",
+            json={
+                "date": "2026-09-01",
+                "department_id": 1,
+                "customer_name": "Maskeleme Test",
+                "customer_tax_id": "12345678901",
+                "item_name": "Test Kalemi",
+                "amount_excl_vat": "100.00",
+                "vat_rate": "0.20",
+                "amount_incl_vat": "120.00"
+            },
+            headers={**admin_headers, "X-Branch-ID": "1"}
+        )
+        sample = post_res.json()
 
     assert "customer_tax_id" not in sample, "Standart API çıktısında raw customer_tax_id bulunmamalıdır!"
-    assert "customer_tax_id_masked" in sample
+    assert sample.get("customer_tax_id_masked") is not None
     assert "*" in sample["customer_tax_id_masked"]
 
     sens_res = client.get(

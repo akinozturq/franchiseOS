@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Any, Dict, List
 from datetime import datetime
 
@@ -35,6 +35,9 @@ class PeriodClosureOut(BaseModel):
     closed_by_user_id: Optional[int] = None
     reconciliation_snapshot: Optional[Dict[str, Any]] = None
     bonus_snapshot: Optional[Dict[str, Any]] = None
+    calculation_engine_version: Optional[str] = None
+    input_hash: Optional[str] = None
+    result_hash: Optional[str] = None
     reopened_at: Optional[datetime] = None
     reopened_by_user_id: Optional[int] = None
     reopen_reason: Optional[str] = None

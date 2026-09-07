@@ -3,6 +3,8 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel
 
+COMMISSION_ENGINE_VERSION = "1.0.0"
+
 class CollectorParty(str, Enum):
     BAYI = "BAYI"
     FRANCHISOR = "FRANCHISOR"

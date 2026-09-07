@@ -5,11 +5,11 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL RLS](https://img.shields.io/badge/PostgreSQL-Row--Level%20Security-336791.svg?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org)
-[![Pytest](https://img.shields.io/badge/Tests-81%2F81%20Passed%20(100%25)-success.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
-[![Coverage](https://img.shields.io/badge/Coverage-84%25%20(pytest--cov)-green.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
+[![Pytest](https://img.shields.io/badge/Tests-90%2F90%20Passed%20(100%25)-success.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
+[![Coverage](https://img.shields.io/badge/Coverage-85%25%20(pytest--cov)-green.svg?style=flat&logo=pytest&logoColor=white)](https://docs.pytest.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Franchise ve bayi ağı modeliyle faaliyet gösteren işletmeler için geliştirilmiş; **çok kiracılı (multi-tenant)**, **kademeli ciro payı ve hakediş mutabakatı**, **personel prim motoru**, **PostgreSQL Row-Level Security (RLS)** ile mutlak veri izolasyonu, **tarihsel kural versiyonlama**, **donmuş immutable snapshot**, **resmi PDF ihracı** ve **UBL-TR e-fatura veri iskeleti** sunan uçtan uca kurumsal finans platformudur.
+Franchise ve bayi ağı modeliyle faaliyet gösteren işletmeler için geliştirilmiş; **çok kiracılı (multi-tenant)**, **kademeli ciro payı ve hakediş mutabakatı**, **personel prim motoru**, **PostgreSQL Row-Level Security (RLS)** ile mutlak veri izolasyonu, **tarihsel kural versiyonlama**, **kriptografik denetim zarfı ve donmuş immutable snapshot**, **resmi PDF ihracı** ve **UBL-TR e-fatura veri iskeleti** sunan uçtan uca kurumsal finans platformudur.
 
 ---
 
@@ -67,15 +67,16 @@ FranchiseOS, temel finansal mutabakat ve prim algoritmaları açısından **sekt
 - Geçmiş aylar sorgulandığında ilgili dönemin son günündeki tarihsel kurallarla kuruşu kuruşuna deterministik hesaplama yapılır.
 - Tüm değişiklikler [`RuleChangeLog`](backend/app/models/rule_change_log.py) üzerinde eski/yeni JSON değer farkları ile loglanır.
 
-### 5. Dönem Kapama ve Donmuş Immutable Snapshot
-- Dönem kapatıldığında (`PeriodClosure`) o anki mutabakat ve prim tabloları **JSONB snapshot** olarak mühürlenir.
+### 5. Dönem Kapama, Donmuş Snapshot ve Kriptografik Denetim Zarfı
+- **Kriptografik Bütünlük ve Denetim Zarfı (Audit Envelope):** Dönem kapama anında (`PeriodClosure`), hesaplama motorlarının versiyonları (`COMMISSION_ENGINE_VERSION`, `BONUS_ENGINE_VERSION`), tüm girdi işlemlerinin kanonik sıralı SHA-256 özeti (`input_hash`) ve üretilen finansal sonuçların SHA-256 özeti (`result_hash`) mühürlenir. Dış mali denetçiler, hesaplama formüllerinin ve girdi verilerinin değişmediğini matematiksel olarak doğrulayabilir.
+- **Donmuş JSONB Snapshot:** Dönem kapatıldığında o anki mutabakat ve prim tabloları **JSONB snapshot** olarak mühürlenir.
 - **Mutasyon Kilidi:** Kapatılmış bir döneme ait işlemlerde `POST`, `PUT`, `DELETE` ve toplu Excel/CSV içe aktarımları **HTTP 400** ile engellenir.
 - **Kural Değişikliği Bağışıklığı:** Dönem kapatıldıktan sonra sistemdeki kurallar değişse dahi, kapalı dönemin mutabakat, prim ve PDF raporları donmuş snapshot'tan servis edilir; hiçbir kural değişikliği geçmiş kapalı döneme nüfuz edemez.
 - **Gerekçeli Yeniden Açma (Reopen):** Yalnızca Franchisor Admin tarafından, zorunlu gerekçe (`reopen_reason`, min 5 karakter) girilerek yapılabilir.
 
 ### 6. Resmi PDF Export & UBL-TR E-Fatura Veri İskeleti
 - **ReportLab PDF:** Kaşe ve imza kutuları, resmi durum rozeti, departman/kategori dökümleri ve mali özet kartları içeren kurumsal mutabakat ve prim belgeleri (`/reconciliation/export-pdf`, `/bonus/export-pdf`).
-- **E-Fatura JSON İskeleti:** UBL-TR standartlarında satıcı, alıcı, %20 KDV, matrah ve fatura yönü notunu içeren entegratör uyumlu payload (`/period-closures/{id}/invoice-data`).
+- **Dinamik Franchisor & E-Fatura JSON:** Sistem genel merkez verilerini statik kod yerine veritabanındaki `Franchisor` master modelinden dinamik çeker. UBL-TR standartlarında satıcı, alıcı, %20 KDV, matrah, fatura yönü ve kriptografik denetim zarfını (`input_hash`, `result_hash`, `engine_version`) içeren entegratör uyumlu payload üretir (`/period-closures/{id}/invoice-data`).
 
 ### 7. Bildirim Merkezi (Notification Center)
 - Okunmamış sayaç rozeti, tekil/toplu okundu işaretleme ve ay sonu yaklaşan kapanmamış dönemler için otomatik hatırlatıcı taraması.
@@ -84,6 +85,10 @@ FranchiseOS, temel finansal mutabakat ve prim algoritmaları açısından **sekt
 - CSV/XLSX dosyalarındaki sütun başlıklarını otomatik tahminleyen akıllı eşleştirme motoru.
 - Türkçe tarih (`GG.AA.YYYY`, `YYYY-AA-GG`) ve ondalık (`1.250,50 TL`) format toleransı.
 - KVKK uyumlu TCKN/VKN maskeleme (`*******8901`).
+
+### 9. Yüksek Başarımlı Toplu Ön Yükleme (N+1 Query Eliminasyonu)
+- Mutabakat ve prim hesaplama pipeline'larında döngü içi sorgular (`N+1`) tamamen kaldırılmıştır.
+- Tüm kategori kural istisnaları ve kademeli rol baremleri tek bir veritabanı sorgusunda toplu ön yüklenir (`bulk preloading`), bellek içi haritalama (in-memory lookup) ile $O(1)$ sürede eşleştirilir.
 
 ---
 
@@ -176,23 +181,25 @@ Sistem seed çalıştırıldığında aşağıdaki test kullanıcılarıyla haz�
 
 ## 🧪 Test ve Kalite Güvencesi
 
-FranchiseOS, **81 adet otomatikleştirilmiş test** ile %100 test başarı oranı (pass rate) ve %84 kod kapsamı (pytest-cov) ile güvence altındadır.
+FranchiseOS, **90 adet otomatikleştirilmiş test** ile %100 test başarı oranı (pass rate) ve %85 kod kapsamı (pytest-cov) ile güvence altındadır.
 
 ```powershell
 # Tüm backend testlerini çalıştırmak ve kod kapsamını (coverage) ölçmek için:
 cd backend
-..\.venv\Scripts\pytest --cov=backend/app --cov-report=term-missing -v
+..\.venv\Scripts\pytest --cov=app --cov-report=term-missing -v
 ```
 
 ### Kalite ve Kapsam Metrikleri
-* **Test Başarı Oranı (Pass Rate):** `%100` (81 / 81 test yeşil)
-* **Kod Kapsamı (Code Coverage):** `%84` (`pytest-cov` ile ölçülmüştür; Veri Modelleri & Şemalar `%99-%100`, Hesaplama & Finans Motorları `%96-%100`)
+* **Test Başarı Oranı (Pass Rate):** `%100` (90 / 90 test yeşil)
+* **Kod Kapsamı (Code Coverage):** `%85` (`pytest-cov` ile ölçülmüştür; Veri Modelleri & Şemalar `%99-%100`, Hesaplama & Finans Motorları `%96-%100`, PDF & Export `%97-%100`)
+* **Finansal Yuvarlama Politikası:** `ROUND_HALF_UP` (Bankacılık ve Vergi Usul Kanunu standartlarında işlem bazında ve toplamda 2 hane ondalık kesinliği)
 
-### Test Paketi Dağılımı (81 / 81 PASSED):
+### Test Paketi Dağılımı (90 / 90 PASSED):
+- **IDOR & Çapraz Bayi Penetrasyon Testleri (`test_idor_penetration.py` - 9 Test):** Header ve sorgu parametresi manipülasyonu (`X-Branch-Id`, `?branch_id=2`), doğrudan IDOR işlem sorgulaması, KVKK TCKN/VKN sızıntı denemeleri, çapraz şube işlem güncelleme/atama girişimi, yetkisiz dönem kapama ve mutabakat ihracı blokajları, finansal `ROUND_HALF_UP` yuvarlama tutarlılığı.
 - **P0 Güvenlik & Finansal Sertleştirme (`test_p0_hardening.py`):** Kapalı dönem işlem atama bypass engeli, kilitli dönem mutasyon koruması, KDV dahil/hariç matematiksel invariant validasyonu, KVKK veri minimizasyonu (`customer_tax_id` gizleme ve yetkili `/sensitive` endpoint'i), yarı-açık kural aralığı `[from, to)` sınır günü çakışma önlemi, production JWT secret & CORS kısıtları.
 - **Donmuş Snapshot Kanıtı (`test_frozen_snapshot_proof.py`):** Dönem kapandıktan sonra kurallar değişse bile mutabakatın ve PDF'in donmuş kaldığının, reopen ile canlıya döndüğünün kanıtı.
 - **Dönem Kilitleri & İmmutability (`test_closed_period_restrictions.py`):** Kapalı döneme işlem ekleme, güncelleme, silme ve Excel aktarım engelleri; bayi reopen yasağı ve gerekçe validasyonu.
-- **E-Fatura Veri İskeleti (`test_invoice_data_skeleton.py`):** Bayi ve Franchisor tahsilat yönlerinde UBL-TR uyumlu alıcı/satıcı, KDV ve satır hesapları.
+- **E-Fatura & Kriptografik Denetim İskeleti (`test_invoice_data_skeleton.py`):** Dinamik Franchisor tüzel unvanı, bayi ve franchisor tahsilat yönlerinde UBL-TR uyumlu alıcı/satıcı, KDV, satır hesapları ve `audit_envelope` (`input_hash`, `result_hash`).
 - **Uygulama İçi Bildirimler (`test_notifications.py`):** Sayaç, okundu işaretleme, kapatma hatırlatma taraması ve kapatma talebi bildirimleri.
 - **Rol Prim Kademesi Versiyonlama (`test_role_tier_versioning.py`):** `ADD_TIER` ve `DELETE_TIER` işlemleri ve audit log takibi.
 - **Kural Versiyonlama (`test_rule_versioning.py`):** Komisyon baremleri ve kategori istisnalarının tarihsel ayrımı.
@@ -232,7 +239,7 @@ franchiseOS/
 │   │   ├── models/                    # SQLAlchemy ORM tabloları
 │   │   ├── schemas/                   # Pydantic v2 DTO modelleri
 │   │   └── services/                  # Hesaplama motorları, PDF, Excel & CSV import
-│   ├── tests/                         # 75 adet Pytest entegrasyon & birim testi
+│   ├── tests/                         # 90 adet Pytest entegrasyon, IDOR penetrasyon & birim testi
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/

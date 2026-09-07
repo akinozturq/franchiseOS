@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from decimal import Decimal
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
 
@@ -66,25 +66,23 @@ def build_period_bonus_data(branch_id: int, year: int, month: int, db: Session) 
         Employee.is_active == True
     ).order_by(Employee.id.asc()).all()
 
+    # 2. Preload role tiers for all roles in this branch to eliminate N+1 queries
+    all_role_tiers = db.query(RoleCommissionTier).join(Role).filter(
+        Role.branch_id == branch.id
+    ).all()
+
     emp_dtos: List[EmployeeDTO] = []
     for emp in employees_db:
         role = emp.role
         tiers_dto = []
         if role:
-            # Query role tiers effective for this period
-            tiers_db = db.query(RoleCommissionTier).filter(
-                RoleCommissionTier.role_id == role.id,
-                RoleCommissionTier.effective_from <= period_date,
-                or_(
-                    RoleCommissionTier.effective_to == None,
-                    RoleCommissionTier.effective_to > period_date
-                )
-            ).order_by(RoleCommissionTier.min_amount.asc()).all()
-
-            if not tiers_db:
-                tiers_db = db.query(RoleCommissionTier).filter(
-                    RoleCommissionTier.role_id == role.id
-                ).order_by(RoleCommissionTier.min_amount.asc()).all()
+            role_tiers_matched = [
+                t for t in all_role_tiers
+                if t.role_id == role.id and t.effective_from <= period_date and (t.effective_to is None or t.effective_to > period_date)
+            ]
+            if not role_tiers_matched:
+                role_tiers_matched = [t for t in all_role_tiers if t.role_id == role.id]
+            role_tiers_matched.sort(key=lambda t: t.min_amount)
 
             tiers_dto = [
                 RoleTierDTO(
@@ -93,7 +91,7 @@ def build_period_bonus_data(branch_id: int, year: int, month: int, db: Session) 
                     max_amount=t.max_amount,
                     rate=t.rate
                 )
-                for t in tiers_db
+                for t in role_tiers_matched
             ]
 
         emp_dtos.append(EmployeeDTO(
@@ -117,25 +115,25 @@ def build_period_bonus_data(branch_id: int, year: int, month: int, db: Session) 
 
     dept_map = {d.id: d.name for d in db.query(Department).filter(Department.branch_id == branch.id).all()}
 
+    # Preload all category rules for this branch to eliminate N+1 queries
+    all_cat_rules = db.query(TransactionCategory).filter(
+        TransactionCategory.branch_id == branch.id
+    ).all()
+
+    def get_bonus_override_for_date(cat_name: Optional[str], tx_date: date) -> Optional[Decimal]:
+        if not cat_name:
+            return None
+        for cr in all_cat_rules:
+            if cr.name == cat_name and cr.effective_from <= tx_date and (cr.effective_to is None or cr.effective_to > tx_date):
+                return cr.bonus_override_rate
+        return None
+
     tx_dtos: List[BonusTransactionDTO] = []
     for tx in txs_db:
-        override_rate = None
-        cat_name = None
-        if tx.category:
-            cat_name = tx.category.name
+        cat_name = tx.category.name if tx.category else None
+        override_rate = get_bonus_override_for_date(cat_name, tx.date)
+        if override_rate is None and tx.category:
             override_rate = tx.category.bonus_override_rate
-            # Check versioned category rule at tx.date
-            cat_rule = db.query(TransactionCategory).filter(
-                TransactionCategory.branch_id == branch.id,
-                TransactionCategory.name == tx.category.name,
-                TransactionCategory.effective_from <= tx.date,
-                or_(
-                    TransactionCategory.effective_to == None,
-                    TransactionCategory.effective_to > tx.date
-                )
-            ).first()
-            if cat_rule:
-                override_rate = cat_rule.bonus_override_rate
 
         tx_dtos.append(BonusTransactionDTO(
             id=tx.id,
