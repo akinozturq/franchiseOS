@@ -63,3 +63,6 @@ Thumbs.db
 *.log
 agy --conversation=*.txt
 *.txt.tmp
+
+# Prompt & Internal Specs
+franchise-komisyon-sistemi*.md
